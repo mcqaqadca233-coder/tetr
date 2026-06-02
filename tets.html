@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Tetris Mobile Fixed</title>
+<style>
+body{
+margin:0;
+background:#111;
+overflow:hidden;
+font-family:Arial;
+color:white;
+touch-action:none;
+}
+canvas{
+display:block;
+margin:40px auto 0;
+background:#000;
+border:2px solid #555;
+width:min(38vw,220px);
+height:min(76vw,440px);
+}
+#holdPanel{
+position:fixed;
+top:70px;
+left:8px;
+background:#000c;
+padding:6px;
+border-radius:8px;
+z-index:5;
+width:70px;
+}
+#holdPanel h4{
+margin:0 0 4px 0;
+text-align:center;
+font-size:12px;
+}
+#previewPanel{
+position:fixed;
+top:70px;
+left:calc(50% + min(19vw,110px) + 6px);
+background:#000c;
+padding:6px;
+border-radius:8px;
+z-index:5;
+width:70px;
+}
+#previewPanel h4{
+margin:0 0 4px 0;
+text-align:center;
+font-size:12px;
+}
+.previewRow{
+display:flex;
+justify-content:center;
+}
+.previewCell{
+width:14px;
+height:14px;
+margin:0.5px;
+}
+.previewItem{
+margin-bottom:3px;
+}
+#hud{
+position:fixed;
+top:8px;
+left:8px;
+background:#000c;
+padding:6px;
+border-radius:8px;
+z-index:4;
+font-size:12px;
+}
+#top{
+position:fixed;
+top:8px;
+right:8px;
+z-index:20;
+}
+button{
+padding:6px;
+margin:2px;
+font-size:12px;
+}
+.ctrl{
+position:fixed;
+width:68px;
+height:68px;
+border-radius:50%;
+background:#ffffff22;
+border:2px solid white;
+display:flex;
+justify-content:center;
+align-items:center;
+font-size:24px;
+touch-action:none;
+user-select:none;
+z-index:10;
+}
+#menu{
+position:fixed;
+inset:0;
+background:#000d;
+display:none;
+z-index:50;
+overflow:auto;
+}
+#menuInner{
+max-width:500px;
+margin:auto;
+padding:20px;
+}
+.sec{
+background:#222;
+padding:12px;
+border-radius:10px;
+margin-bottom:12px;
+}
+label{
+display:inline-block;
+width:100px;
+margin:4px 0;
+font-size:13px;
+}
+.val-text{
+display:inline-block;
+width:50px;
+margin-left:6px;
+font-size:12px;
+color:#4fc3f7;
+}
+.slide-wrap{
+display:flex;
+align-items:center;
+margin:6px 0;
+}
+input[type="range"]{
+flex:1;
+margin:0 8px;
+}
+.timer-text{
+color:#ffd600;
+font-weight:bold;
+}
+</style>
+</head>
+<body>
+<canvas id="game" width="300" height="600"></canvas>
+<div id="holdPanel">
+<h4>HOLD</h4>
+<div id="holdPreview"></div>
+</div>
+<div id="previewPanel">
+<h4>NEXT</h4>
+<div id="previewList"></div>
+</div>
+<div id="hud"></div>
+<div id="top">
+<button onclick="restart()">重开</button>
+<button onclick="toggleMenu()">设置</button>
+</div>
+<div id="menu">
+<div id="menuInner">
+<div class="sec">
+<h3>模式选择</h3>
+<label>40行竞速模式</label>
+<input id="mode40L" type="checkbox"><br>
+</div>
+<div class="sec">
+<h3>Handling</h3>
+<div class="slide-wrap">
+<label>DAS</label>
+<input id="das" type="range" min="0" max="300" value="100">
+<span class="val-text" id="dasVal">100ms</span>
+</div>
+<div class="slide-wrap">
+<label>ARR</label>
+<input id="arr" type="range" min="0" max="50" value="0">
+<span class="val-text" id="arrVal">0ms</span>
+</div>
+<div class="slide-wrap">
+<label>基础下落</label>
+<input id="grav" type="range" min="50" max="1000" value="700">
+<span class="val-text" id="gravVal">700ms</span>
+</div>
+<div class="slide-wrap">
+<label>锁定延迟</label>
+<input id="lock" type="range" min="0" max="1500" value="500">
+<span class="val-text" id="lockVal">500ms</span>
+</div>
+<div class="slide-wrap">
+<label>软降速度</label>
+<input id="softGrav" type="range" min="0" max="300" value="0">
+<span class="val-text" id="softGravVal">瞬落</span>
+</div>
+<label>旋转重置锁定</label>
+<input id="rotResetLock" type="checkbox" checked><br>
+<label>移动重置锁定</label>
+<input id="moveResetLock" type="checkbox" checked><br>
+<label>显示5格预览</label>
+<input id="showPreview" type="checkbox" checked><br>
+<label>硬降抖动特效</label>
+<input id="effectDropShake" type="checkbox" checked><br>
+</div>
+<div class="sec">
+<h3>键位</h3>
+<div id="keybinds"></div>
+</div>
+<button onclick="toggleMenu()">关闭</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const COLS=10;
+const ROWS=20;
+const SIZE=30;
+const PREVIEW_COUNT = 5;
+const TARGET_LINES = 40;
+const COLORS={
+I:"#0ff",O:"#ff0",T:"#c0f",S:"#0f0",Z:"#f00",J:"#06f",L:"#f90"
+};
+const SHAPES={
+T:[[[0,1,0],[1,1,1],[0,0,0]],[[0,1,0],[0,1,1],[0,1,0]],[[0,0,0],[1,1,1],[0,1,0]],[[0,1,0],[1,1,0],[0,1,0]]],
+O:[[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
+I:[[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],[[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]],[[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]],[[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]]],
+L:[[[0,0,1],[1,1,1],[0,0,0]],[[0,1,0],[0,1,0],[0,1,1]],[[0,0,0],[1,1,1],[1,0,0]],[[1,1,0],[0,1,0],[0,1,0]]],
+J:[[[1,0,0],[1,1,1],[0,0,0]],[[0,1,1],[0,1,0],[0,1,0]],[[0,0,0],[1,1,1],[0,0,1]],[[0,1,0],[0,1,0],[1,1,0]]],
+S:[[[0,1,1],[1,1,0],[0,0,0]],[[0,1,0],[0,1,1],[0,0,1]],[[0,0,0],[0,1,1],[1,1,0]],[[1,0,0],[1,1,0],[0,1,0]]],
+Z:[[[1,1,0],[0,1,1],[0,0,0]],[[0,0,1],[0,1,1],[0,1,0]],[[0,0,0],[1,1,0],[0,1,1]],[[0,1,0],[1,1,0],[1,0,0]]]
+};
+let board=[];
+let queue=[];
+let hold=null;
+let canHold=true;
+let piece=null;
+let score=0;
+let lines=0;
+let gravityTimer=0;
+let lockTimer=0;
+let grounded=false;
+const pressed={};
+const binds={
+left:"ArrowLeft",right:"ArrowRight",soft:"ArrowDown",hard:"Space",
+cw:"ArrowUp",ccw:"KeyZ",r180:"KeyA",hold:"ShiftLeft"
+};
+let shakeOffsetY = 0;
+let shakeTime = 0;
+let gameTime = 0;
+let timeRunning = false;
+let gameEnd = false;
+let gameOver = false;
+function bindSliderDisplay(){
+const sliders = ["das","arr","grav","lock","softGrav"];
+sliders.forEach(id=>{
+const inp = document.getElementById(id);
+const valSpan = document.getElementById(id+"Val");
+const update = ()=>{
+let v = +inp.value;
+if(id==="softGrav" && v===0){
+valSpan.innerText = "瞬落";
+}else{
+valSpan.innerText = v + "ms";
+}
+};
+inp.addEventListener("input",update);
+update();
+});
+}
+function makeBoard(){
+board=Array.from({length:ROWS},()=>Array(COLS).fill(""));
+}
+function bag(){
+let a=["I","O","T","S","Z","J","L"];
+for(let i=a.length-1;i>0;i--){
+let j=Math.floor(Math.random()*(i+1));
+[a[i],a[j]]=[a[j],a[i]];
+}
+return a;
+}
+function nextPiece(){
+if(queue.length<12) queue.push(...bag());
+let type = queue.shift();
+// 仅O方块x=4居中，其他保持x=3不偏移
+let spawnX = type === "O" ? 4 : 3;
+return {type, x:spawnX, y:-2, r:0};
+}
+function renderHoldPreview(){
+const wrap = document.getElementById("holdPreview");
+wrap.innerHTML = "";
+if(!hold) return;
+const shape = SHAPES[hold][0];
+shape.forEach(row=>{
+const rowDiv = document.createElement("div");
+rowDiv.className = "previewRow";
+row.forEach(cell=>{
+const cellDiv = document.createElement("span");
+cellDiv.className = "previewCell";
+cellDiv.style.background = cell ? COLORS[hold] : "#222";
+cellDiv.style.opacity = cell ? 0.85 : 1;
+rowDiv.appendChild(cellDiv);
+});
+wrap.appendChild(rowDiv);
+});
+}
+function renderPreview(){
+const previewList = document.getElementById("previewList");
+const showPreview = document.getElementById("showPreview").checked;
+document.getElementById("previewPanel").style.display = showPreview ? "block" : "none";
+previewList.innerHTML = "";
+const next5 = queue.slice(0, PREVIEW_COUNT);
+next5.forEach(type=>{
+const shape = SHAPES[type][0];
+const wrap = document.createElement("div");
+wrap.className = "previewItem";
+shape.forEach(row=>{
+const rowDiv = document.createElement("div");
+rowDiv.className = "previewRow";
+row.forEach(cell=>{
+const cellDiv = document.createElement("span");
+cellDiv.className = "previewCell";
+cellDiv.style.background = cell ? COLORS[type] : "#222";
+cellDiv.style.opacity = cell ? 0.85 : 1;
+rowDiv.appendChild(cellDiv);
+});
+wrap.appendChild(rowDiv);
+});
+previewList.appendChild(wrap);
+});
+}
+// 碰撞检测：允许上方出界，禁止左右、下方出界
+function collide(px,py,pr,pt){
+let s=SHAPES[pt][pr];
+for(let y=0;y<s.length;y++){
+for(let x=0;x<s[y].length;x++){
+if(s[y][x]){
+let nx=px+x;
+let ny=py+y;
+if(nx<0 || nx>=COLS || ny>=ROWS) return true;
+if(ny>=0 && board[ny][nx]) return true;
+}
+}
+}
+return false;
+}
+// 出生重叠检测：只要落到可视区内和方块重叠就死亡
+function isSpawnDead(px,py,pr,pt){
+let s=SHAPES[pt][pr];
+for(let y=0;y<s.length;y++){
+for(let x=0;x<s[y].length;x++){
+if(s[y][x]){
+let nx = px + x;
+let ny = py + y;
+if(ny >= 0 && board[ny][nx]) return true;
+}
+}
+}
+return false;
+}
+function spawn(){
+piece = nextPiece();
+canHold = true;
+grounded = false;
+lockTimer = 0;
+// 出生直接重叠 → 游戏结束
+if(isSpawnDead(piece.x, piece.y, piece.r, piece.type)){
+gameOver = true;
+timeRunning = false;
+}
+renderPreview();
+renderHoldPreview();
+}
+function move(dx){
+if(collide(piece.x+dx,piece.y,piece.r,piece.type)) return false;
+piece.x += dx;
+if(document.getElementById("moveResetLock").checked){
+lockTimer = 0;
+grounded = false;
+}
+return true;
+}
+const JLSTZ_KICKS = {
+"0>1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+"1>0":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
+"1>2":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
+"2>1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+"2>3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+"3>2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+"3>0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+"0>3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]]
+};
+const I_KICKS = {
+"0>1":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+"1>0":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+"1>2":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+"2>1":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+"2>3":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+"3>2":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+"3>0":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+"0>3":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
+};
+const KICK_180 = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0]];
+function rotate(dir){
+if(gameOver) return;
+const oldRot = piece.r;
+const newRot = (oldRot + dir + 4) % 4;
+if(piece.type === "O"){
+piece.r = newRot;
+if(document.getElementById("rotResetLock").checked){
+lockTimer = 0;
+grounded = false;
+}
+return true;
+}
+if(Math.abs(dir) === 2){
+for(const [dx,dy] of KICK_180){
+const nx = piece.x + dx;
+const ny = piece.y - dy;
+if(!collide(nx,ny,newRot,piece.type)){
+piece.x = nx; piece.y = ny; piece.r = newRot;
+if(document.getElementById("rotResetLock").checked){
+grounded = false; lockTimer = 0;
+}
+return true;
+}
+}
+return false;
+}
+const key = oldRot + ">" + newRot;
+const table = piece.type === "I" ? I_KICKS[key] : JLSTZ_KICKS[key];
+for(const [dx,dy] of table){
+const nx = piece.x + dx;
+const ny = piece.y - dy;
+if(!collide(nx,ny,newRot,piece.type)){
+piece.x = nx; piece.y = ny; piece.r = newRot;
+if(document.getElementById("rotResetLock").checked){
+grounded = false; lockTimer = 0;
+}
+return true;
+}
+}
+return false;
+}
+function merge(){
+let s=SHAPES[piece.type][piece.r];
+for(let y=0;y<s.length;y++){
+for(let x=0;x<s[y].length;x++){
+if(s[y][x]) {
+let ty = piece.y + y;
+if(ty >= 0) board[ty][piece.x+x] = piece.type;
+}
+}
+}
+}
+function clearLines(){
+for(let y=ROWS-1;y>=0;y--){
+if(board[y].every(v=>v)){
+board.splice(y,1);
+board.unshift(Array(COLS).fill(""));
+score+=100; lines++; y++;
+}
+}
+if(document.getElementById("mode40L").checked && lines >= TARGET_LINES){
+gameEnd = true;
+timeRunning = false;
+}
+}
+function lockPiece(){
+merge();
+clearLines();
+spawn();
+}
+function hardDrop(){
+if(gameOver) return;
+while(!collide(piece.x,piece.y+1,piece.r,piece.type)) piece.y++;
+if(document.getElementById("effectDropShake").checked){
+shakeOffsetY = 8;
+shakeTime = 150;
+}
+lockPiece();
+}
+function softDropToBottom(){
+while(!collide(piece.x,piece.y+1,piece.r,piece.type)){
+piece.y++;
+}
+grounded = true;
+}
+function holdPiece(){
+if(gameOver || !canHold) return;
+if(hold === null){
+hold = piece.type;
+spawn();
+}else{
+let t = hold;
+hold = piece.type;
+// hold交换也只给O单独x=4
+piece = {type:t, x: t==="O"?4:3, y:-2, r:0};
+lockTimer = 0;
+}
+canHold = false;
+renderPreview();
+renderHoldPreview();
+}
+document.addEventListener("keydown",e=>{
+if(gameOver || gameEnd) return;
+if(document.getElementById("mode40L").checked && !timeRunning){
+timeRunning = true; gameTime = 0;
+}
+pressed[e.code] = true;
+if(e.code===binds.cw) rotate(1);
+if(e.code===binds.ccw) rotate(-1);
+if(e.code===binds.r180) rotate(2);
+if(e.code===binds.hard) hardDrop();
+if(e.code===binds.hold) holdPiece();
+});
+document.addEventListener("keyup",e=>{
+pressed[e.code] = false;
+});
+let last=0,ldas=0,rdas=0;
+function update(t=0){
+let dt = t - last; last = t;
+const grav = +document.getElementById("grav").value;
+const softGrav = +document.getElementById("softGrav").value;
+const DAS = +document.getElementById("das").value;
+const ARR = +document.getElementById("arr").value;
+const LOCK = +document.getElementById("lock").value;
+if(timeRunning && !gameEnd && !gameOver){
+gameTime += dt;
+}
+if(shakeTime>0){
+shakeTime -= dt;
+shakeOffsetY *= 0.82;
+}else shakeOffsetY = 0;
+if(gameOver || gameEnd){
+draw();
+requestAnimationFrame(update);
+return;
+}
+gravityTimer += dt;
+if(pressed[binds.soft]){
+if(document.getElementById("mode40L").checked && !timeRunning){
+timeRunning = true; gameTime = 0;
+}
+if(softGrav === 0){
+softDropToBottom();
+}else if(gravityTimer >= softGrav){
+if(!collide(piece.x,piece.y+1,piece.r,piece.type)){
+piece.y++; grounded = false;
+}else{
+grounded = true;
+}
+gravityTimer = 0;
+}
+}else{
+if(gravityTimer >= grav){
+if(!collide(piece.x,piece.y+1,piece.r,piece.type)){
+piece.y++; grounded = false;
+}else{
+grounded = true;
+lockTimer += grav;
+if(lockTimer >= LOCK) lockPiece();
+}
+gravityTimer = 0;
+}
+}
+if(grounded && softGrav !== 0){
+lockTimer += dt;
+if(lockTimer >= LOCK){
+lockPiece();
+}
+}
+if(pressed[binds.left]){
+ldas += dt;
+if(ldas < 20) move(-1);
+else if(ldas > DAS){
+if(ARR === 0) while(move(-1));
+else if(ldas % ARR < 16) move(-1);
+}
+}else ldas = 0;
+if(pressed[binds.right]){
+rdas += dt;
+if(rdas < 20) move(1);
+else if(rdas > DAS){
+if(ARR === 0) while(move(1));
+else if(rdas % ARR < 16) move(1);
+}
+}else rdas = 0;
+if((pressed[binds.left]||pressed[binds.right]) && document.getElementById("moveResetLock").checked){
+lockTimer = 0;
+}
+draw();
+requestAnimationFrame(update);
+}
+function block(x,y,c,a=1){
+ctx.globalAlpha=a;
+ctx.fillStyle=c;
+ctx.fillRect(x*SIZE, y*SIZE + shakeOffsetY, SIZE-1, SIZE-1);
+ctx.globalAlpha=1;
+}
+function formatTime(ms){
+return (ms/1000).toFixed(2) + "s";
+}
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+// 绘制网格
+for(let y=0;y<ROWS;y++){
+for(let x=0;x<COLS;x++){
+ctx.strokeStyle="#333";
+ctx.strokeRect(x*SIZE, y*SIZE, SIZE, SIZE);
+if(board[y][x]) block(x,y,COLORS[board[y][x]]);
+}
+}
+if(!gameOver){
+// 影子
+let gy = piece.y;
+while(!collide(piece.x, gy+1, piece.r, piece.type)) gy++;
+let s = SHAPES[piece.type][piece.r];
+for(let y=0;y<s.length;y++){
+for(let x=0;x<s[y].length;x++){
+if(s[y][x]){
+block(piece.x+x, gy+y, COLORS[piece.type], 0.2);
+block(piece.x+x, piece.y+y, COLORS[piece.type]);
+}
+}
+}
+}
+let modeTxt = document.getElementById("mode40L").checked 
+    ? `Lines:${lines}/${TARGET_LINES}` 
+    : `Lines:${lines}`;
+let timeTxt = document.getElementById("mode40L").checked
+    ? `<br><span class="timer-text">Time:${formatTime(gameTime)}</span>`
+    : "";
+let endTxt = gameEnd ? "<br><span class='timer-text'>完成40L!</span>" : "";
+let overTxt = gameOver ? "<br><span style='color:red;font-weight:bold'>游戏结束</span>" : "";
+document.getElementById("hud").innerHTML =
+"Score:"+score+"<br>"+modeTxt + timeTxt + endTxt + overTxt;
+}
+function restart(){
+makeBoard();
+queue = bag();
+score = 0;
+lines = 0;
+hold = null;
+canHold = true;
+lockTimer = 0;
+gravityTimer = 0;
+shakeOffsetY = 0;
+shakeTime = 0;
+gameTime = 0;
+timeRunning = false;
+gameEnd = false;
+gameOver = false;
+spawn();
+}
+function toggleMenu(){
+const m = document.getElementById("menu");
+m.style.display = m.style.display === "block" ? "none" : "block";
+}
+function renderKeybinds(){
+const kc = document.getElementById("keybinds");
+kc.innerHTML = "";
+for(let k in binds){
+let b = document.createElement("button");
+b.textContent = k+" : "+binds[k];
+b.onclick = ()=>{
+b.textContent="按任意键";
+const fn = e=>{
+binds[k] = e.code;
+renderKeybinds();
+document.removeEventListener("keydown",fn);
+};
+document.addEventListener("keydown",fn);
+};
+kc.appendChild(b);
+}
+}
+function mobileButton(text,x,y,onPress,onRelease){
+const b = document.createElement("div");
+b.className="ctrl";
+b.textContent=text;
+b.style.left=x+"px";
+b.style.top=y+"px";
+b.addEventListener("touchstart",e=>{
+e.preventDefault();
+if(gameOver||gameEnd) return;
+if(document.getElementById("mode40L").checked && !timeRunning){
+timeRunning = true; gameTime = 0;
+}
+onPress();
+});
+b.addEventListener("touchend",e=>{
+e.preventDefault();
+if(onRelease) onRelease();
+});
+document.body.appendChild(b);
+}
+bindSliderDisplay();
+restart();
+renderKeybinds();
+requestAnimationFrame(update);
+const baseY = window.innerHeight - 210;
+mobileButton("←",20,baseY,()=>pressed[binds.left]=true,()=>pressed[binds.left]=false);
+mobileButton("→",105,baseY,()=>pressed[binds.right]=true,()=>pressed[binds.right]=false);
+mobileButton("H",62,baseY-85,()=>holdPiece());
+mobileButton("⤓",window.innerWidth-170,baseY,()=>hardDrop());
+mobileButton("↓",window.innerWidth-85,baseY,()=>pressed[binds.soft]=true,()=>pressed[binds.soft]=false);
+mobileButton("180",window.innerWidth-128,baseY-85,()=>rotate(2));
+mobileButton("⟲",window.innerWidth-170,baseY+85,()=>rotate(-1));
+mobileButton("⟳",window.innerWidth-85,baseY+85,()=>rotate(1));
+</script>
+</body>
+</html>
