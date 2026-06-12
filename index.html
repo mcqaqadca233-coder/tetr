@@ -23,13 +23,17 @@ height:min(76vw,440px);
 }
 #holdPanel{
 position:fixed;
-top:70px;
-left:8px;
+/* 与游戏场地顶部完全对齐（和canvas的margin-top一致） */
+top:40px;
+/* 计算位置：场地左侧边缘 - 面板宽度 - 10px间距 */
+left: calc((100vw - min(38vw, 220px)) / 2 - 70px - 10px);
 background:#000c;
 padding:6px;
 border-radius:8px;
 z-index:5;
 width:70px;
+/* 关键：让width包含padding，计算更准确 */
+box-sizing: border-box;
 }
 #holdPanel h4{
 margin:0 0 4px 0;
@@ -86,18 +90,16 @@ font-size:12px;
 }
 .ctrl{
 position:fixed;
-width:68px;
-height:68px;
 border-radius:50%;
 background:#ffffff22;
 border:2px solid white;
 display:flex;
 justify-content:center;
 align-items:center;
-font-size:24px;
 touch-action:none;
 user-select:none;
 z-index:10;
+box-sizing: border-box;
 }
 #menu{
 position:fixed;
@@ -106,6 +108,7 @@ background:#000d;
 display:none;
 z-index:50;
 overflow:auto;
+touch-action: auto; 
 }
 #menuInner{
 max-width:500px;
@@ -144,6 +147,19 @@ margin:0 8px;
 color:#ffd600;
 font-weight:bold;
 }
+#editOverlay {
+display:none; 
+position:fixed; 
+top:20px; 
+left:50%; 
+transform:translateX(-50%); 
+z-index:200; 
+background:rgba(0,0,0,0.85); 
+padding:15px 30px; 
+border-radius:10px; 
+text-align:center;
+border: 1px solid #555;
+}
 </style>
 </head>
 <body>
@@ -161,13 +177,34 @@ font-weight:bold;
 <button onclick="restart()">重开</button>
 <button onclick="toggleMenu()">设置</button>
 </div>
+
 <div id="menu">
 <div id="menuInner">
+
 <div class="sec">
-<h3>模式选择</h3>
+<h3>模式与玩法</h3>
 <label>40行竞速模式</label>
 <input id="mode40L" type="checkbox"><br>
+<div class="slide-wrap">
+<label>开局倒计时</label>
+<input id="cdTime" type="range" min="0" max="3" value="0">
+<span class="val-text" id="cdTimeVal">0秒</span>
 </div>
+</div>
+
+<div class="sec">
+<h3>虚拟按键设置</h3>
+<label>隐藏屏幕按键</label>
+<input id="btnHide" type="checkbox"><br>
+<div class="slide-wrap">
+<label>按键大小</label>
+<input id="btnSize" type="range" min="40" max="120" value="68">
+<span class="val-text" id="btnSizeVal">68px</span>
+</div>
+<button onclick="toggleEditMode()" style="width:100%; margin-top:10px; padding:10px;">调整按键位置 (进入编辑模式)</button>
+<button onclick="resetButtonLayout()" style="width:100%; margin-top:5px; padding:10px; background:#633;">重置按键布局</button>
+</div>
+
 <div class="sec">
 <h3>Handling</h3>
 <div class="slide-wrap">
@@ -177,7 +214,7 @@ font-weight:bold;
 </div>
 <div class="slide-wrap">
 <label>ARR</label>
-<input id="arr" type="range" min="0" max="50" value="0">
+<input id="arr" type="range" min="0" max="100" value="0">
 <span class="val-text" id="arrVal">0ms</span>
 </div>
 <div class="slide-wrap">
@@ -187,14 +224,21 @@ font-weight:bold;
 </div>
 <div class="slide-wrap">
 <label>锁定延迟</label>
-<input id="lock" type="range" min="0" max="1500" value="500">
-<span class="val-text" id="lockVal">500ms</span>
+<input id="lock" type="range" min="0" max="1500" value="1200">
+<span class="val-text" id="lockVal">1200ms</span>
 </div>
 <div class="slide-wrap">
 <label>软降速度</label>
 <input id="softGrav" type="range" min="0" max="300" value="0">
 <span class="val-text" id="softGravVal">瞬落</span>
 </div>
+<div class="slide-wrap">
+<label>消行延迟</label>
+<input id="lineClearDelay" type="range" min="0" max="1000" value="0">
+<span class="val-text" id="lineClearDelayVal">0ms</span>
+</div>
+<label>消行动画</label>
+<input id="effectLineClear" type="checkbox" checked><br>
 <label>旋转重置锁定</label>
 <input id="rotResetLock" type="checkbox" checked><br>
 <label>移动重置锁定</label>
@@ -205,12 +249,19 @@ font-weight:bold;
 <input id="effectDropShake" type="checkbox" checked><br>
 </div>
 <div class="sec">
-<h3>键位</h3>
+<h3>键盘键位</h3>
 <div id="keybinds"></div>
 </div>
-<button onclick="toggleMenu()">关闭</button>
+<button onclick="toggleMenu()" style="width:100%; padding:12px; font-size:16px;">关闭 / 恢复游戏</button>
 </div>
 </div>
+
+<div id="editOverlay">
+<h3 style="margin:0 0 10px 0; color:#fff;">按键布局编辑中</h3>
+<p style="margin:0 0 15px 0; font-size:12px; color:#ccc;">拖动屏幕上的按键调整位置</p>
+<button onclick="toggleEditMode()" style="padding:10px 20px; font-size:16px; font-weight:bold; color:black; background:white; border-radius:5px;">保存并退出编辑</button>
+</div>
+
 <script>
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
@@ -231,6 +282,7 @@ J:[[[1,0,0],[1,1,1],[0,0,0]],[[0,1,1],[0,1,0],[0,1,0]],[[0,0,0],[1,1,1],[0,0,1]]
 S:[[[0,1,1],[1,1,0],[0,0,0]],[[0,1,0],[0,1,1],[0,0,1]],[[0,0,0],[0,1,1],[1,1,0]],[[1,0,0],[1,1,0],[0,1,0]]],
 Z:[[[1,1,0],[0,1,1],[0,0,0]],[[0,0,1],[0,1,1],[0,1,0]],[[0,0,0],[1,1,0],[0,1,1]],[[0,1,0],[1,1,0],[1,0,0]]]
 };
+
 let board=[];
 let queue=[];
 let hold=null;
@@ -244,31 +296,110 @@ let grounded=false;
 const pressed={};
 const binds={
 left:"ArrowLeft",right:"ArrowRight",soft:"ArrowDown",hard:"Space",
-cw:"ArrowUp",ccw:"KeyZ",r180:"KeyA",hold:"ShiftLeft"
+cw:"ArrowUp",ccw:"KeyZ",r180:"KeyA",hold:"ShiftLeft",restart:"KeyR"
 };
+
+try {
+    const saved = localStorage.getItem("keybinds");
+    if (saved) Object.assign(binds, JSON.parse(saved));
+} catch (e) {}
+
 let shakeOffsetY = 0;
 let shakeTime = 0;
 let gameTime = 0;
 let timeRunning = false;
 let gameEnd = false;
 let gameOver = false;
+let isPaused = false; 
+
+// 倒计时相关变量
+let isCountingDown = false;
+let currentCountdown = 0;
+
+// 消行相关变量
+let isClearingLines = false;
+let lineClearTimer = 0;
+let lineClearMaxTime = 0;
+let linesToClear = [];
+
+const ctrlButtons = {};
+let editMode = false;
+let currentDragBtn = null;
+let dragStart = {x:0, y:0};
+let btnStart = {x:0, y:0};
+
 function bindSliderDisplay(){
-const sliders = ["das","arr","grav","lock","softGrav"];
+const sliders = ["das","arr","grav","lock","softGrav","btnSize","cdTime","lineClearDelay"];
 sliders.forEach(id=>{
 const inp = document.getElementById(id);
+if(!inp) return;
 const valSpan = document.getElementById(id+"Val");
 const update = ()=>{
 let v = +inp.value;
-if(id==="softGrav" && v===0){
-valSpan.innerText = "瞬落";
-}else{
-valSpan.innerText = v + "ms";
-}
+if(id==="softGrav" && v===0) valSpan.innerText = "瞬落";
+else if(id==="btnSize") valSpan.innerText = v + "px";
+else if(id==="cdTime") valSpan.innerText = v + "秒";
+else valSpan.innerText = v + "ms";
+// 新增：滑块修改时立即保存所有设置
+saveAllSettings();
 };
 inp.addEventListener("input",update);
+// 补充：添加change事件（兼容部分设备）
+inp.addEventListener("change", update);
+// 立即执行一次更新（加载设置后同步显示）
 update();
 });
+const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.addEventListener("change", saveAllSettings);
+    });
 }
+
+// 加载所有保存的设置
+function loadAllSettings() {
+    try {
+        const saved = localStorage.getItem("tetrisSettings");
+        if (!saved) return;
+        const settings = JSON.parse(saved);
+        
+        // 遍历所有设置项，自动应用到页面
+        Object.keys(settings).forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.type === "checkbox") {
+                el.checked = settings[id];
+            } else {
+                el.value = settings[id];
+            }
+        });
+    } catch (e) {
+        console.error("加载设置失败：", e);
+    }
+}
+
+// 保存所有设置到本地
+function saveAllSettings() {
+    const settings = {};
+    // 所有需要保存的设置项ID（核对是否有遗漏）
+    const settingIds = [
+        "mode40L", "cdTime", "btnHide", "btnSize",
+        "das", "arr", "grav", "lock", "softGrav", "lineClearDelay",
+        "effectLineClear", "rotResetLock", "moveResetLock", "showPreview", "effectDropShake"
+    ];
+    
+    settingIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        settings[id] = el.type === "checkbox" ? el.checked : el.value;
+    });
+    
+    try {
+        localStorage.setItem("tetrisSettings", JSON.stringify(settings));
+    } catch (e) {
+        console.error("保存设置失败：", e);
+    }
+}
+
 function makeBoard(){
 board=Array.from({length:ROWS},()=>Array(COLS).fill(""));
 }
@@ -283,7 +414,6 @@ return a;
 function nextPiece(){
 if(queue.length<12) queue.push(...bag());
 let type = queue.shift();
-// 仅O方块x=4居中，其他保持x=3不偏移
 let spawnX = type === "O" ? 4 : 3;
 return {type, x:spawnX, y:-2, r:0};
 }
@@ -330,7 +460,6 @@ wrap.appendChild(rowDiv);
 previewList.appendChild(wrap);
 });
 }
-// 碰撞检测：允许上方出界，禁止左右、下方出界
 function collide(px,py,pr,pt){
 let s=SHAPES[pt][pr];
 for(let y=0;y<s.length;y++){
@@ -345,7 +474,6 @@ if(ny>=0 && board[ny][nx]) return true;
 }
 return false;
 }
-// 出生重叠检测：只要落到可视区内和方块重叠就死亡
 function isSpawnDead(px,py,pr,pt){
 let s=SHAPES[pt][pr];
 for(let y=0;y<s.length;y++){
@@ -364,7 +492,6 @@ piece = nextPiece();
 canHold = true;
 grounded = false;
 lockTimer = 0;
-// 出生直接重叠 → 游戏结束
 if(isSpawnDead(piece.x, piece.y, piece.r, piece.type)){
 gameOver = true;
 timeRunning = false;
@@ -403,14 +530,13 @@ const I_KICKS = {
 };
 const KICK_180 = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0]];
 function rotate(dir){
-if(gameOver) return;
+if(gameOver || isPaused || isCountingDown || isClearingLines) return;
 const oldRot = piece.r;
 const newRot = (oldRot + dir + 4) % 4;
 if(piece.type === "O"){
 piece.r = newRot;
 if(document.getElementById("rotResetLock").checked){
-lockTimer = 0;
-grounded = false;
+lockTimer = 0; grounded = false;
 }
 return true;
 }
@@ -454,7 +580,8 @@ if(ty >= 0) board[ty][piece.x+x] = piece.type;
 }
 }
 }
-function clearLines(){
+
+function removeClearedLines(){
 for(let y=ROWS-1;y>=0;y--){
 if(board[y].every(v=>v)){
 board.splice(y,1);
@@ -467,13 +594,31 @@ gameEnd = true;
 timeRunning = false;
 }
 }
+
 function lockPiece(){
 merge();
-clearLines();
+linesToClear = [];
+for(let y=0; y<ROWS; y++){
+if(board[y].every(v=>v)) linesToClear.push(y);
+}
+
+if(linesToClear.length > 0) {
+const delay = +document.getElementById("lineClearDelay").value;
+if(delay > 0) {
+    isClearingLines = true;
+    lineClearMaxTime = delay;
+    lineClearTimer = delay;
+} else {
+    removeClearedLines();
+    spawn();
+}
+} else {
 spawn();
 }
+}
+
 function hardDrop(){
-if(gameOver) return;
+if(gameOver || isPaused || isCountingDown || isClearingLines) return;
 while(!collide(piece.x,piece.y+1,piece.r,piece.type)) piece.y++;
 if(document.getElementById("effectDropShake").checked){
 shakeOffsetY = 8;
@@ -481,21 +626,22 @@ shakeTime = 150;
 }
 lockPiece();
 }
+
 function softDropToBottom(){
 while(!collide(piece.x,piece.y+1,piece.r,piece.type)){
 piece.y++;
 }
 grounded = true;
 }
+
 function holdPiece(){
-if(gameOver || !canHold) return;
+if(gameOver || !canHold || isPaused || isCountingDown || isClearingLines) return;
 if(hold === null){
 hold = piece.type;
 spawn();
 }else{
 let t = hold;
 hold = piece.type;
-// hold交换也只给O单独x=4
 piece = {type:t, x: t==="O"?4:3, y:-2, r:0};
 lockTimer = 0;
 }
@@ -503,8 +649,9 @@ canHold = false;
 renderPreview();
 renderHoldPreview();
 }
+
 document.addEventListener("keydown",e=>{
-if(gameOver || gameEnd) return;
+if(gameOver || gameEnd || isPaused || isCountingDown || isClearingLines) return;
 if(document.getElementById("mode40L").checked && !timeRunning){
 timeRunning = true; gameTime = 0;
 }
@@ -514,30 +661,65 @@ if(e.code===binds.ccw) rotate(-1);
 if(e.code===binds.r180) rotate(2);
 if(e.code===binds.hard) hardDrop();
 if(e.code===binds.hold) holdPiece();
+if(e.code===binds.restart) restart();
 });
 document.addEventListener("keyup",e=>{
 pressed[e.code] = false;
 });
+
 let last=0,ldas=0,rdas=0;
 function update(t=0){
 let dt = t - last; last = t;
+
+if(isPaused || editMode){
+draw();
+requestAnimationFrame(update);
+return;
+}
+
+if(timeRunning && !gameEnd && !gameOver) {
+gameTime += dt;
+}
+
+if(shakeTime>0){
+shakeTime -= dt;
+shakeOffsetY *= 0.82;
+}else shakeOffsetY = 0;
+
+if(isCountingDown) {
+currentCountdown -= dt;
+if(currentCountdown <= 0) {
+    isCountingDown = false;
+}
+draw();
+requestAnimationFrame(update);
+return;
+}
+
+if(isClearingLines) {
+lineClearTimer -= dt;
+if(lineClearTimer <= 0) {
+    isClearingLines = false;
+    removeClearedLines();
+    spawn();
+}
+draw();
+requestAnimationFrame(update);
+return;
+}
+
 const grav = +document.getElementById("grav").value;
 const softGrav = +document.getElementById("softGrav").value;
 const DAS = +document.getElementById("das").value;
 const ARR = +document.getElementById("arr").value;
 const LOCK = +document.getElementById("lock").value;
-if(timeRunning && !gameEnd && !gameOver){
-gameTime += dt;
-}
-if(shakeTime>0){
-shakeTime -= dt;
-shakeOffsetY *= 0.82;
-}else shakeOffsetY = 0;
+
 if(gameOver || gameEnd){
 draw();
 requestAnimationFrame(update);
 return;
 }
+
 gravityTimer += dt;
 if(pressed[binds.soft]){
 if(document.getElementById("mode40L").checked && !timeRunning){
@@ -571,28 +753,79 @@ if(lockTimer >= LOCK){
 lockPiece();
 }
 }
-if(pressed[binds.left]){
-ldas += dt;
-if(ldas < 20) move(-1);
-else if(ldas > DAS){
-if(ARR === 0) while(move(-1));
-else if(ldas % ARR < 16) move(-1);
+
+// ==================== 修复后DAS逻辑（解决长按反向无反应） ====================
+// 先检查当前方块左右是否还能移动
+const canMoveLeft = !collide(piece.x - 1, piece.y, piece.r, piece.type);
+const canMoveRight = !collide(piece.x + 1, piece.y, piece.r, piece.type);
+
+// 处理左方向
+if (pressed[binds.left] && canMoveLeft) {
+    // 核心修复1：按下左键时立即清空右方向计时器
+    rdas = 0;
+    
+    // 首次按下或反向切换时立即移动一格
+    if (ldas === 0) {
+        move(-1);
+    }
+    
+    ldas += dt;
+    
+    // 达到DAS延迟后开始连续移动
+    if (ldas > DAS) {
+        if (ARR === 0) {
+            // ARR=0时直接移动到底
+            while (move(-1));
+        } else {
+            // 适配所有屏幕刷新率的ARR计算
+            if ((ldas - DAS) % ARR < dt + 1) {
+                move(-1);
+            }
+        }
+    }
+} else {
+    // 核心修复2：松开或撞墙时立即重置计时器
+    ldas = 0;
 }
-}else ldas = 0;
-if(pressed[binds.right]){
-rdas += dt;
-if(rdas < 20) move(1);
-else if(rdas > DAS){
-if(ARR === 0) while(move(1));
-else if(rdas % ARR < 16) move(1);
+
+// 处理右方向
+if (pressed[binds.right] && canMoveRight) {
+    // 核心修复1：按下右键时立即清空左方向计时器
+    ldas = 0;
+    
+    // 首次按下或反向切换时立即移动一格
+    if (rdas === 0) {
+        move(1);
+    }
+    
+    rdas += dt;
+    
+    // 达到DAS延迟后开始连续移动
+    if (rdas > DAS) {
+        if (ARR === 0) {
+            // ARR=0时直接移动到底
+            while (move(1));
+        } else {
+            // 适配所有屏幕刷新率的ARR计算
+            if ((rdas - DAS) % ARR < dt + 1) {
+                move(1);
+            }
+        }
+    }
+} else {
+    // 核心修复2：松开或撞墙时立即重置计时器
+    rdas = 0;
 }
-}else rdas = 0;
+
+
+
 if((pressed[binds.left]||pressed[binds.right]) && document.getElementById("moveResetLock").checked){
 lockTimer = 0;
 }
 draw();
 requestAnimationFrame(update);
 }
+
 function block(x,y,c,a=1){
 ctx.globalAlpha=a;
 ctx.fillStyle=c;
@@ -604,16 +837,32 @@ return (ms/1000).toFixed(2) + "s";
 }
 function draw(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
-// 绘制网格
+
 for(let y=0;y<ROWS;y++){
 for(let x=0;x<COLS;x++){
 ctx.strokeStyle="#333";
 ctx.strokeRect(x*SIZE, y*SIZE, SIZE, SIZE);
-if(board[y][x]) block(x,y,COLORS[board[y][x]]);
+
+if(board[y][x]) {
+    // 渲染消行动画
+    if(isClearingLines && linesToClear.includes(y)) {
+        if(document.getElementById("effectLineClear").checked) {
+            let ratio = Math.max(0, lineClearTimer / lineClearMaxTime);
+            // 方块逐渐变透明，并有白光闪烁
+            block(x, y, COLORS[board[y][x]], ratio);
+            ctx.fillStyle = `rgba(255,255,255,${ratio})`;
+            ctx.fillRect(x*SIZE, y*SIZE + shakeOffsetY, SIZE-1, SIZE-1);
+        } else {
+            block(x,y,COLORS[board[y][x]]);
+        }
+    } else {
+        block(x,y,COLORS[board[y][x]]);
+    }
 }
 }
-if(!gameOver){
-// 影子
+}
+
+if(!gameOver && !isClearingLines){
 let gy = piece.y;
 while(!collide(piece.x, gy+1, piece.r, piece.type)) gy++;
 let s = SHAPES[piece.type][piece.r];
@@ -626,17 +875,33 @@ block(piece.x+x, piece.y+y, COLORS[piece.type]);
 }
 }
 }
+
+if(isCountingDown) {
+let num = Math.ceil(currentCountdown / 1000);
+ctx.fillStyle = "rgba(0,0,0,0.6)";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ctx.fillStyle = "#fff";
+ctx.font = "bold 80px Arial";
+ctx.textAlign = "center";
+ctx.textBaseline = "middle";
+ctx.fillText(num, canvas.width/2, canvas.height/2);
+ctx.textAlign = "left";
+ctx.textBaseline = "alphabetic";
+}
+
 let modeTxt = document.getElementById("mode40L").checked 
-    ? `Lines:${lines}/${TARGET_LINES}` 
-    : `Lines:${lines}`;
+? `Lines:${lines}/${TARGET_LINES}` 
+: `Lines:${lines}`;
 let timeTxt = document.getElementById("mode40L").checked
-    ? `<br><span class="timer-text">Time:${formatTime(gameTime)}</span>`
-    : "";
+? `<br><span class="timer-text">Time:${formatTime(gameTime)}</span>`
+: "";
 let endTxt = gameEnd ? "<br><span class='timer-text'>完成40L!</span>" : "";
 let overTxt = gameOver ? "<br><span style='color:red;font-weight:bold'>游戏结束</span>" : "";
 document.getElementById("hud").innerHTML =
 "Score:"+score+"<br>"+modeTxt + timeTxt + endTxt + overTxt;
 }
+
 function restart(){
 makeBoard();
 queue = bag();
@@ -652,63 +917,238 @@ gameTime = 0;
 timeRunning = false;
 gameEnd = false;
 gameOver = false;
+isClearingLines = false;
+lineClearTimer = 0;
+linesToClear = [];
+
+let cdSetting = parseInt(document.getElementById("cdTime").value);
+if (cdSetting > 0) {
+isCountingDown = true;
+currentCountdown = cdSetting * 1000;
+} else {
+isCountingDown = false;
+currentCountdown = 0;
+}
+
 spawn();
 }
+
 function toggleMenu(){
 const m = document.getElementById("menu");
-m.style.display = m.style.display === "block" ? "none" : "block";
+if(m.style.display === "block") {
+m.style.display = "none";
+isPaused = false;
+// 新增：退出设置菜单时强制保存所有设置
+saveAllSettings();
+applyButtonSettings(); 
+} else {
+m.style.display = "block";
+isPaused = true; 
 }
+}
+
 function renderKeybinds(){
-const kc = document.getElementById("keybinds");
-kc.innerHTML = "";
-for(let k in binds){
-let b = document.createElement("button");
-b.textContent = k+" : "+binds[k];
-b.onclick = ()=>{
-b.textContent="按任意键";
-const fn = e=>{
-binds[k] = e.code;
-renderKeybinds();
-document.removeEventListener("keydown",fn);
-};
-document.addEventListener("keydown",fn);
-};
-kc.appendChild(b);
+    const kc = document.getElementById("keybinds");
+    kc.innerHTML = "";
+    for(let k in binds){
+        let b = document.createElement("button");
+        b.textContent = k+" : "+binds[k];
+        b.onclick = ()=>{
+            b.textContent="按任意键";
+            const fn = e=>{
+                binds[k] = e.code;
+                // 👇 只加这一行：修改键位后立刻永久保存到浏览器
+                localStorage.setItem("keybinds", JSON.stringify(binds));
+                renderKeybinds();
+                document.removeEventListener("keydown",fn);
+            };
+            document.addEventListener("keydown",fn);
+        };
+        kc.appendChild(b);
+    }
 }
-}
-function mobileButton(text,x,y,onPress,onRelease){
+
+// ==== UI 按钮 & 拖拽交互 ====
+function mobileButton(id, text, defaultX, defaultY, onPress, onRelease){
 const b = document.createElement("div");
 b.className="ctrl";
+b.id = "btn_" + id;
 b.textContent=text;
-b.style.left=x+"px";
-b.style.top=y+"px";
-b.addEventListener("touchstart",e=>{
-e.preventDefault();
-if(gameOver||gameEnd) return;
-if(document.getElementById("mode40L").checked && !timeRunning){
-timeRunning = true; gameTime = 0;
+
+let pos = {x: defaultX, y: defaultY};
+try {
+let saved = localStorage.getItem("btn_pos_" + id);
+if (saved) {
+    let parsed = JSON.parse(saved);
+    if (parsed && typeof parsed.x === 'number') pos = parsed;
 }
-onPress();
-});
+} catch(e) { }
+
+b.style.left=pos.x+"px";
+b.style.top=pos.y+"px";
+
+b.addEventListener("touchstart",e=>{
+if (editMode) {
+    e.preventDefault();
+    currentDragBtn = b;
+    dragStart = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+    btnStart = {x: parseInt(b.style.left)||0, y: parseInt(b.style.top)||0};
+    b.style.backgroundColor = "rgba(255,100,100,0.5)";
+} else {
+    e.preventDefault();
+    if(gameOver||gameEnd || isPaused || isCountingDown || isClearingLines) return;
+    if(document.getElementById("mode40L").checked && !timeRunning){
+        timeRunning = true; gameTime = 0;
+    }
+    onPress();
+}
+}, {passive: false});
+
 b.addEventListener("touchend",e=>{
 e.preventDefault();
-if(onRelease) onRelease();
+if (!editMode && onRelease) onRelease();
 });
-document.body.appendChild(b);
+
+b.addEventListener("mousedown", e=>{
+if(editMode) {
+    currentDragBtn = b;
+    dragStart = {x: e.clientX, y: e.clientY};
+    btnStart = {x: parseInt(b.style.left)||0, y: parseInt(b.style.top)||0};
+    b.style.backgroundColor = "rgba(255,100,100,0.5)";
 }
+});
+
+document.body.appendChild(b);
+ctrlButtons[id] = b;
+}
+
+document.addEventListener("touchmove", e => {
+if(editMode && currentDragBtn) {
+e.preventDefault();
+let dx = e.touches[0].clientX - dragStart.x;
+let dy = e.touches[0].clientY - dragStart.y;
+currentDragBtn.style.left = (btnStart.x + dx) + "px";
+currentDragBtn.style.top = (btnStart.y + dy) + "px";
+}
+}, {passive: false});
+
+document.addEventListener("touchend", e => {
+if(editMode && currentDragBtn) {
+let id = currentDragBtn.id.replace("btn_", "");
+try {
+    localStorage.setItem("btn_pos_" + id, JSON.stringify({
+        x: parseInt(currentDragBtn.style.left),
+        y: parseInt(currentDragBtn.style.top)
+    }));
+} catch(err) {}
+currentDragBtn.style.backgroundColor = "";
+currentDragBtn = null;
+}
+});
+
+document.addEventListener("mousemove", e => {
+if(editMode && currentDragBtn && e.buttons === 1) {
+let dx = e.clientX - dragStart.x;
+let dy = e.clientY - dragStart.y;
+currentDragBtn.style.left = (btnStart.x + dx) + "px";
+currentDragBtn.style.top = (btnStart.y + dy) + "px";
+}
+});
+document.addEventListener("mouseup", e => {
+if(editMode && currentDragBtn) {
+let id = currentDragBtn.id.replace("btn_", "");
+try {
+    localStorage.setItem("btn_pos_" + id, JSON.stringify({
+        x: parseInt(currentDragBtn.style.left),
+        y: parseInt(currentDragBtn.style.top)
+    }));
+} catch(err) {}
+currentDragBtn.style.backgroundColor = "";
+currentDragBtn = null;
+}
+});
+
+// 移除重复的loadButtonSettings，统一由loadAllSettings加载
+
+// 修正applyButtonSettings：直接从页面元素取值，不再单独读写localStorage
+function applyButtonSettings() {
+let size = document.getElementById("btnSize").value;
+let hide = document.getElementById("btnHide").checked;
+
+for(let id in ctrlButtons) {
+let b = ctrlButtons[id];
+b.style.width = size + "px";
+b.style.height = size + "px";
+b.style.fontSize = (size * 0.35) + "px";
+
+if (hide && !editMode) {
+    b.style.display = "none";
+} else {
+    b.style.display = "flex";
+}
+}
+}
+
+function toggleEditMode() {
+editMode = !editMode;
+const overlay = document.getElementById("editOverlay");
+const menu = document.getElementById("menu");
+
+if (editMode) {
+menu.style.display = "none";
+overlay.style.display = "block";
+for(let id in ctrlButtons) {
+    ctrlButtons[id].style.display = "flex";
+    ctrlButtons[id].style.border = "2px dashed #ff6666";
+    ctrlButtons[id].style.zIndex = 100;
+}
+} else {
+overlay.style.display = "none";
+for(let id in ctrlButtons) {
+    ctrlButtons[id].style.border = "2px solid white";
+    ctrlButtons[id].style.zIndex = 10;
+}
+applyButtonSettings(); 
+// 新增：退出编辑模式时保存设置
+saveAllSettings();
+menu.style.display = "block";
+}
+}
+
+function resetButtonLayout() {
+if(confirm("确定要重置所有屏幕按键的位置和设置吗？")) {
+try {
+    // 清空按键位置和全局设置
+    let keys = Object.keys(localStorage);
+    keys.forEach(k => {
+        if(k.startsWith("btn_pos_") || k === "tetrisSettings" || k === "keybinds") {
+            localStorage.removeItem(k);
+        }
+    });
+} catch(e) {}
+location.reload();
+}
+}
+
+// ==== 初始化 ====
+// 修复：先加载设置，再绑定滑块显示（保证值同步）
+loadAllSettings();
 bindSliderDisplay();
 restart();
 renderKeybinds();
-requestAnimationFrame(update);
+
 const baseY = window.innerHeight - 210;
-mobileButton("←",20,baseY,()=>pressed[binds.left]=true,()=>pressed[binds.left]=false);
-mobileButton("→",105,baseY,()=>pressed[binds.right]=true,()=>pressed[binds.right]=false);
-mobileButton("H",62,baseY-85,()=>holdPiece());
-mobileButton("⤓",window.innerWidth-170,baseY,()=>hardDrop());
-mobileButton("↓",window.innerWidth-85,baseY,()=>pressed[binds.soft]=true,()=>pressed[binds.soft]=false);
-mobileButton("180",window.innerWidth-128,baseY-85,()=>rotate(2));
-mobileButton("⟲",window.innerWidth-170,baseY+85,()=>rotate(-1));
-mobileButton("⟳",window.innerWidth-85,baseY+85,()=>rotate(1));
+mobileButton("left", "←", 20, baseY, ()=>pressed[binds.left]=true, ()=>pressed[binds.left]=false);
+mobileButton("right", "→", 105, baseY, ()=>pressed[binds.right]=true, ()=>pressed[binds.right]=false);
+mobileButton("hold", "H", 62, baseY-85, ()=>holdPiece());
+mobileButton("hard", "⤓", window.innerWidth-170, baseY, ()=>hardDrop());
+mobileButton("soft", "↓", window.innerWidth-85, baseY, ()=>pressed[binds.soft]=true, ()=>pressed[binds.soft]=false);
+mobileButton("r180", "180", window.innerWidth-128, baseY-85, ()=>rotate(2));
+mobileButton("ccw", "⟲", window.innerWidth-170, baseY+85, ()=>rotate(-1));
+mobileButton("cw", "⟳", window.innerWidth-85, baseY+85, ()=>rotate(1));
+
+applyButtonSettings(); 
+requestAnimationFrame(update);
 </script>
 </body>
 </html>
