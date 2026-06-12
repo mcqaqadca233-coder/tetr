@@ -5,9 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
     <meta name="touch-action" content="manipulation">
 
-<title>teto小块</title>
+<title>Texris</title>
 <style>
 body{
+
+
+
 margin:0;
 background:#111;
 overflow:hidden;
@@ -586,7 +589,7 @@ if(ty >= 0) board[ty][piece.x+x] = piece.type;
 }
 
 function removeClearedLines(){
-    sfx("./sfx/0/tetris.ogg");
+    
 for(let y=ROWS-1;y>=0;y--){
 if(board[y].every(v=>v)){
 board.splice(y,1);
@@ -608,6 +611,8 @@ if(board[y].every(v=>v)) linesToClear.push(y);
 }
 
 if(linesToClear.length > 0) {
+    //消除音效
+    sfx("./sfx/0/tetris.ogg");
 const delay = +document.getElementById("lineClearDelay").value;
 if(delay > 0) {
     isClearingLines = true;
@@ -854,10 +859,13 @@ ctx.strokeRect(x*SIZE, y*SIZE, SIZE, SIZE);
 
 if(board[y][x]) {
     // 渲染消行动画
+    
     if(isClearingLines && linesToClear.includes(y)) {
         if(document.getElementById("effectLineClear").checked) {
             let ratio = Math.max(0, lineClearTimer / lineClearMaxTime);
             // 方块逐渐变透明，并有白光闪烁
+            
+
             block(x, y, COLORS[board[y][x]], ratio);
             ctx.fillStyle = `rgba(255,255,255,${ratio})`;
             ctx.fillRect(x*SIZE, y*SIZE + shakeOffsetY, SIZE-1, SIZE-1);
@@ -867,6 +875,7 @@ if(board[y][x]) {
     } else {
         block(x,y,COLORS[board[y][x]]);
     }
+    
 }
 }
 }
