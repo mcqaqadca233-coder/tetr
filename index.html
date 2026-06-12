@@ -1147,14 +1147,34 @@ restart();
 renderKeybinds();
 
 const baseY = window.innerHeight - 210;
-mobileButton("left", "←", 20, baseY, ()=>pressed[binds.left]=true, ()=>pressed[binds.left]=false);
-mobileButton("right", "→", 105, baseY, ()=>pressed[binds.right]=true, ()=>pressed[binds.right]=false);
-mobileButton("hold", "H", 62, baseY-85, ()=>holdPiece());
-mobileButton("hard", "⤓", window.innerWidth-170, baseY, ()=>hardDrop());
-mobileButton("soft", "↓", window.innerWidth-85, baseY, ()=>pressed[binds.soft]=true, ()=>pressed[binds.soft]=false);
-mobileButton("r180", "180", window.innerWidth-128, baseY-85, ()=>rotate(2));
-mobileButton("ccw", "⟲", window.innerWidth-170, baseY+85, ()=>rotate(-1));
-mobileButton("cw", "⟳", window.innerWidth-85, baseY+85, ()=>rotate(1));
+mobileButton("left", "←", 20, baseY, 
+  ()=>{sfx("./sfx/0/g.ogg"); pressed[binds.left]=true;},
+  ()=>pressed[binds.left]=false
+);
+mobileButton("right", "→", 105, baseY, 
+  ()=>{sfx("./sfx/0/a.ogg"); pressed[binds.right]=true;},
+  ()=>pressed[binds.right]=false
+);
+mobileButton("hold", "H", 62, baseY-85, 
+  ()=>{sfx("./sfx/0/f.ogg"); holdPiece();}
+);
+mobileButton("hard", "⤓", window.innerWidth-170, baseY, 
+  ()=>{sfx("./sfx/0/Hx.ogg"); hardDrop();}
+);
+mobileButton("soft", "↓", window.innerWidth-85, baseY, 
+  ()=>pressed[binds.soft]=true, 
+  ()=>pressed[binds.soft]=false
+);
+mobileButton("r180", "180", window.innerWidth-128, baseY-85, 
+  ()=>{sfx("./sfx/0/d.ogg"); rotate(2);}
+);
+mobileButton("ccw", "⟲", window.innerWidth-170, baseY+85, 
+  ()=>{sfx("./sfx/0/e.ogg"); rotate(-1);}
+);
+mobileButton("cw", "⟳", window.innerWidth-85, baseY+85, 
+  ()=>{sfx("./sfx/0/c.ogg"); rotate(1);}
+);
+
 
 applyButtonSettings(); 
 requestAnimationFrame(update);
