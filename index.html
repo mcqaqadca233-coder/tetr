@@ -2,7 +2,9 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+    <meta name="touch-action" content="manipulation">
+
 <title>Tetris Mobile Fixed</title>
 <style>
 body{
@@ -460,6 +462,7 @@ wrap.appendChild(rowDiv);
 previewList.appendChild(wrap);
 });
 }
+
 function collide(px,py,pr,pt){
 let s=SHAPES[pt][pr];
 for(let y=0;y<s.length;y++){
