@@ -7,6 +7,9 @@
 
 <title>Texris</title>
 <style>
+
+
+    
 body{
 
 
@@ -29,7 +32,7 @@ height:min(76vw,440px);
 #holdPanel{
 position:fixed;
 /* 与游戏场地顶部完全对齐（和canvas的margin-top一致） */
-top:80px;
+top:40px;
 /* 计算位置：场地左侧边缘 - 面板宽度 - 10px间距 */
 left: calc((100vw - min(38vw, 220px)) / 2 - 70px - 10px);
 background:#000c;
@@ -165,6 +168,47 @@ border-radius:10px;
 text-align:center;
 border: 1px solid #555;
 }
+
+/* 横屏适配（手机专用，简单可靠） */
+@media (orientation: landscape) and (max-width: 896px) {
+    body {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px;
+        overflow: hidden;
+    }
+    canvas {
+        margin: 0 !important;
+        width: auto !important;
+        height: 85vh !important;
+        max-width: 50vw;
+    }
+    #holdPanel, #previewPanel {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        background: rgba(0,0,0,0.6);
+        width: 65px;
+    }
+    #hud {
+        position: fixed;
+        top: 5px;
+        left: 5px;
+        font-size: 10px;
+        background: rgba(0,0,0,0.5);
+        z-index: 30;
+    }
+    /* 虚拟按键稍微缩小，避免挡内容，如果觉得碍事可以改为 display: none */
+    .ctrl {
+        transform: scale(0.7);
+        transform-origin: bottom right;
+    }
+}
+
+
 </style>
 </head>
 <body>
@@ -700,13 +744,17 @@ shakeOffsetY *= 0.82;
 }else shakeOffsetY = 0;
 
 if(isCountingDown) {
-currentCountdown -= dt;
-if(currentCountdown <= 0) {
-    isCountingDown = false;
-}
-draw();
-requestAnimationFrame(update);
-return;
+    currentCountdown -= dt;
+    if(currentCountdown <= 0) {
+        isCountingDown = false;
+        // 倒计时结束，生成第一个方块
+        if (piece === null) {
+            spawn();
+        }
+    }
+    draw();
+    requestAnimationFrame(update);
+    return;
 }
 
 if(isClearingLines) {
@@ -880,7 +928,7 @@ if(board[y][x]) {
 }
 }
 
-if(!gameOver && !isClearingLines){
+if(!gameOver && !isClearingLines && piece !== null){
 let gy = piece.y;
 while(!collide(piece.x, gy+1, piece.r, piece.type)) gy++;
 let s = SHAPES[piece.type][piece.r];
@@ -939,16 +987,20 @@ isClearingLines = false;
 lineClearTimer = 0;
 linesToClear = [];
 
+// 先填充队列和预览（让第一个方块在 Next 里显示）
+renderPreview();
+renderHoldPreview();
+
 let cdSetting = parseInt(document.getElementById("cdTime").value);
 if (cdSetting > 0) {
-isCountingDown = true;
-currentCountdown = cdSetting * 1000;
+    isCountingDown = true;
+    currentCountdown = cdSetting * 1000;
+    piece = null;          // 关键：倒计时期间没有方块
 } else {
-isCountingDown = false;
-currentCountdown = 0;
+    isCountingDown = false;
+    currentCountdown = 0;
+    spawn();               // 无倒计时则直接生成
 }
-
-spawn();
 }
 
 function toggleMenu(){
